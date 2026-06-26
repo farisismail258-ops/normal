@@ -1,56 +1,24 @@
 'use strict';
 
-const nodemailer = require('nodemailer');
+const express = require('express');
+const db      = require('./database');
+const router  = express.Router();
 
-function createTransport() {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return null;
-  return nodemailer.createTransport({
-    host:   process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port:   parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false,
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-  });
-}
+router.post('/subscribe', (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.includes('@'))
+      return res.status(400).json({ success: false, error: 'Valid email required.' });
 
-async function sendOrderConfirmation({ email, firstName, orderId, items, total, shippingFee, deliveryArea }) {
-  const transporter = createTransport();
-  if (!transporter) {
-    console.log('[Email] No credentials — skipping confirmation for', orderId);
-    return;
+    const existing = db.prepare('SELECT id FROM newsletter WHERE email = ?').get(email.toLowerCase().trim());
+    if (existing)
+      return res.json({ success: true, data: { message: 'Already subscribed!' } });
+
+    db.prepare('INSERT INTO newsletter (email) VALUES (?)').run(email.toLowerCase().trim());
+    res.json({ success: true, data: { message: 'Subscribed! Welcome to LUMEVA.' } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Server error.' });
   }
+});
 
-  const itemsHtml = Array.isArray(items)
-    ? items.map(i => `<tr>
-        <td style="padding:6px 0;font-size:13px">${i.id}</td>
-        <td style="padding:6px 0;text-align:right;font-size:13px">×${i.qty}</td>
-      </tr>`).join('')
-    : '';
-
-  const html = `<!DOCTYPE html><html><body style="margin:0;background:#f4f1ea;font-family:Inter,sans-serif">
-    <div style="max-width:560px;margin:40px auto;background:#fff;padding:40px">
-      <h1 style="font-family:Georgia,serif;font-weight:400;font-size:28px;color:#1a1a18">LUMEVA</h1>
-      <h2 style="font-size:18px;font-weight:500;color:#1a1a18">Order confirmed ✓</h2>
-      <p style="font-size:14px;color:#555">Hi ${firstName || 'there'}, your order <strong>${orderId}</strong> is confirmed.</p>
-      <table style="width:100%;border-collapse:collapse;margin:16px 0">${itemsHtml}
-        <tr style="border-top:1px solid #eee">
-          <td style="padding:10px 0;font-size:13px;color:#555">Delivery to ${deliveryArea || 'your area'}</td>
-          <td style="padding:10px 0;text-align:right;font-size:13px">KES ${(shippingFee||0).toLocaleString()}</td>
-        </tr>
-        <tr>
-          <td style="padding:6px 0;font-weight:600;color:#1a1a18">Total</td>
-          <td style="padding:6px 0;text-align:right;font-weight:600;color:#1a1a18">KES ${(total||0).toLocaleString()}</td>
-        </tr>
-      </table>
-      <p style="font-size:12px;color:#aaa;margin-top:32px">LUMEVA · Kenya's Premium Beauty Destination</p>
-    </div>
-  </body></html>`;
-
-  await transporter.sendMail({
-    from:    process.env.EMAIL_FROM || process.env.EMAIL_USER,
-    to:      email,
-    subject: `Order confirmed — ${orderId} | LUMEVA`,
-    html,
-  });
-}
-
-module.exports = { sendOrderConfirmation };
+module.exports = router;
