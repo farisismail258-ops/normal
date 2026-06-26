@@ -1,22 +1,20 @@
-// src/routes/orders.js
 'use strict';
 
 const express  = require('express');
 const { v4: uuid } = require('uuid');
-const db       = require('../db/database');
-const { sendOrderConfirmation } = require('../services/email');
+const db       = require('./database');
+const email    = require('./email');
 const router   = express.Router();
 
-// POST /api/orders
 router.post('/', async (req, res) => {
   try {
     const {
-      email, firstName, lastName, address, deliveryArea,
+      email: userEmail, firstName, lastName, address, deliveryArea,
       paymentMethod, mpesaPhone, promoCode,
       items, subtotal, shippingFee, discount, total,
     } = req.body;
 
-    if (!email || !items || !Array.isArray(items) || items.length === 0)
+    if (!userEmail || !items || !Array.isArray(items) || items.length === 0)
       return res.status(400).json({ success: false, error: 'Email and items are required.' });
 
     const orderId = `LMV-${Date.now().toString(36).toUpperCase()}`;
@@ -28,14 +26,13 @@ router.post('/', async (req, res) => {
          subtotal, shipping_fee, discount, total, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     `).run(
-      orderId, email, firstName || '', lastName || '', address || '', deliveryArea || '',
+      orderId, userEmail, firstName || '', lastName || '', address || '', deliveryArea || '',
       paymentMethod || 'mpesa', mpesaPhone || '', promoCode || '',
       JSON.stringify(items),
       subtotal || 0, shippingFee || 0, discount || 0, total || 0,
     );
 
-    // Fire-and-forget email confirmation
-    sendOrderConfirmation({ email, firstName, orderId, items, total, shippingFee, deliveryArea })
+    email.sendOrderConfirmation({ email: userEmail, firstName, orderId, items, total, shippingFee, deliveryArea })
       .catch(err => console.warn('Email error:', err.message));
 
     res.json({ success: true, data: { orderId } });
@@ -45,7 +42,6 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/orders/:id
 router.get('/:id', (req, res) => {
   try {
     const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
@@ -56,7 +52,6 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// GET /api/orders  (admin — all orders)
 router.get('/', (req, res) => {
   try {
     const orders = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
