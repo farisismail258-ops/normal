@@ -35,6 +35,7 @@ app.use('/api/delivery',   require('./delivery'));
 app.use('/api/promo',      require('./promo'));
 app.use('/api/newsletter', require('./newsletter'));
 app.use('/api/mpesa',      require('./mpesa'));
+app.use('/api/reviews',    require('./reviews'));
 
 app.use('/api/*', (_, res) => res.status(404).json({ success: false, error: 'Route not found.' }));
 
