@@ -1,7 +1,6 @@
 'use strict';
 
 const express  = require('express');
-const { v4: uuid } = require('uuid');
 const db       = require('./database');
 const email    = require('./email');
 const router   = express.Router();
@@ -18,19 +17,17 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email and items are required.' });
 
     const orderId = `LMV-${Date.now().toString(36).toUpperCase()}`;
-
-    db.prepare(`
-      INSERT INTO orders
-        (id, user_email, first_name, last_name, address, delivery_area,
-         payment_method, mpesa_phone, promo_code, items,
-         subtotal, shipping_fee, discount, total, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `).run(
-      orderId, userEmail, firstName || '', lastName || '', address || '', deliveryArea || '',
-      paymentMethod || 'mpesa', mpesaPhone || '', promoCode || '',
-      JSON.stringify(items),
-      subtotal || 0, shippingFee || 0, discount || 0, total || 0,
-    );
+    const order = {
+      id: orderId, user_email: userEmail,
+      first_name: firstName || '', last_name: lastName || '',
+      address: address || '', delivery_area: deliveryArea || '',
+      payment_method: paymentMethod || 'mpesa', mpesa_phone: mpesaPhone || '',
+      promo_code: promoCode || '', items,
+      subtotal: subtotal || 0, shipping_fee: shippingFee || 0,
+      discount: discount || 0, total: total || 0,
+      status: 'pending', created_at: new Date().toISOString(),
+    };
+    db.orders.insert(order);
 
     email.sendOrderConfirmation({ email: userEmail, firstName, orderId, items, total, shippingFee, deliveryArea })
       .catch(err => console.warn('Email error:', err.message));
@@ -44,9 +41,9 @@ router.post('/', async (req, res) => {
 
 router.get('/:id', (req, res) => {
   try {
-    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    const order = db.orders.findById(req.params.id);
     if (!order) return res.status(404).json({ success: false, error: 'Order not found.' });
-    res.json({ success: true, data: { ...order, items: JSON.parse(order.items) } });
+    res.json({ success: true, data: order });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Server error.' });
   }
@@ -54,8 +51,7 @@ router.get('/:id', (req, res) => {
 
 router.get('/', (req, res) => {
   try {
-    const orders = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
-    res.json({ success: true, data: orders.map(o => ({ ...o, items: JSON.parse(o.items) })) });
+    res.json({ success: true, data: db.orders.all() });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Server error.' });
   }
