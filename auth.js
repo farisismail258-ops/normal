@@ -1,14 +1,24 @@
-// src/routes/auth.js
 'use strict';
 
 const express  = require('express');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const { v4: uuid } = require('uuid');
-const db       = require('../db/database');
+const db       = require('./database');
 const router   = express.Router();
 
-// POST /api/auth/register
+function authRequired(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ success: false, error: 'Unauthorised' });
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ success: false, error: 'Token invalid or expired' });
+  }
+}
+
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -36,7 +46,6 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -61,8 +70,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me
-router.get('/me', require('../middleware/auth').authRequired, (req, res) => {
+router.get('/me', authRequired, (req, res) => {
   const user = db.prepare('SELECT id, name, email, created_at FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ success: false, error: 'User not found.' });
   res.json({ success: true, data: { user } });
