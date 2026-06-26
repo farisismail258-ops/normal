@@ -127,3 +127,21 @@ const db = {
 };
 
 module.exports = db;
+
+// ── Reviews ────────────────────────────────────────────────────────────
+if (!_db.reviews) { _db.reviews = {}; save(_db); }
+
+db.reviews = {
+  get(id) {
+    const r = _db.reviews[id];
+    if (!r || !r.count) return { total: 0, count: 0, avg: 0, list: [] };
+    return { ...r, avg: Math.round((r.total / r.count) * 10) / 10 };
+  },
+  add(id, review) {
+    if (!_db.reviews[id]) _db.reviews[id] = { total: 0, count: 0, list: [] };
+    _db.reviews[id].total += review.stars;
+    _db.reviews[id].count += 1;
+    _db.reviews[id].list.push(review);
+    save(_db);
+  },
+};
